@@ -1,0 +1,48 @@
+# 1. Actualizar e instalar MongoDB en cada VM
+sudo apt update
+sudo apt install -y gnupg
+wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | sudo apt-key add -
+echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+sudo apt update
+sudo apt install -y mongodb-org
+
+# 2. Editar el archivo de configuración en cada VM
+sudo nano /etc/mongod.conf
+
+# Cambiar/Agregar las siguientes líneas:
+# network interfaces
+bindIp: 0.0.0.0
+# replication
+replication:
+  replSetName: "rs0"
+
+# 3. Permitir el puerto 27017 en el firewall de Google Cloud para las 3 VMs
+
+# 4. Iniciar y habilitar MongoDB
+sudo systemctl enable mongod
+sudo systemctl start mongod
+
+# 5. Iniciar el replicaset desde una de las VMs (por ejemplo, la VM1)
+mongo
+
+rs.initiate(
+  {
+    _id: "rs0",
+    members: [
+      { _id: 0, host: "IP_VM1:27017" },
+      { _id: 1, host: "IP_VM2:27017" },
+      { _id: 2, host: "IP_VM3:27017" }
+    ]
+  }
+)
+
+# 6. Verificar el estado del replicaset
+rs.status()
+
+# 7. Agregar usuarios/admin si es necesario (opcional)
+use admin
+db.createUser({user: "admin", pwd: "tu_password", roles:[{role:"root",db:"admin"}]})
+
+# Notas:
+# - Reemplaza IP_VM1, IP_VM2, IP_VM3 por las IPs internas o externas de tus VMs.
+# - Asegúrate de que las VMs puedan comunicarse entre sí por el puerto 27017.

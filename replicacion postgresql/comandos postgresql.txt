@@ -1,0 +1,57 @@
+# 1. Actualizar e instalar PostgreSQL en ambas VMs
+sudo apt update
+sudo apt install postgresql postgresql-contrib -y
+
+# 2. Editar el archivo de configuración en ambas VMs
+sudo nano /etc/postgresql/14/main/postgresql.conf
+
+# Cambiar/Agregar las siguientes líneas:
+# En el servidor MASTER (VM1):
+listen_addresses = '*'
+wal_level = replica
+max_wal_senders = 10
+wal_keep_size = 64
+archive_mode = on
+archive_command = 'cd .'
+
+# 3. Editar el archivo de control de acceso en ambas VMs
+sudo nano /etc/postgresql/14/main/pg_hba.conf
+
+# Agregar al final (reemplaza IP_SLAVE por la IP de la VM2):
+host    replication     replicador      IP_SLAVE/32         md5
+
+# 4. Reiniciar el servicio PostgreSQL en ambas VMs
+sudo systemctl restart postgresql
+
+# 5. Crear usuario de replicación en el MASTER (VM1)
+sudo -u postgres psql
+
+CREATE ROLE replicador WITH REPLICATION LOGIN ENCRYPTED PASSWORD 'tu_password';
+
+# 6. Permitir el puerto 5432 en el firewall de Google Cloud para ambas VMs
+
+# 7. Realizar backup base en el SLAVE (VM2)
+sudo systemctl stop postgresql
+sudo rm -rf /var/lib/postgresql/14/main/*
+sudo -u postgres pg_basebackup -h IP_MASTER -D /var/lib/postgresql/14/main -U replicador -P --wal-method=stream
+
+# 8. Crear archivo recovery en el SLAVE (VM2)
+sudo nano /var/lib/postgresql/14/main/postgresql.auto.conf
+
+# Agregar:
+primary_conninfo = 'host=IP_MASTER port=5432 user=replicador password=tu_password'
+
+# 9. Cambiar permisos si es necesario
+sudo chown -R postgres:postgres /var/lib/postgresql/14/main
+
+# 10. Iniciar el servicio PostgreSQL en el SLAVE (VM2)
+sudo systemctl start postgresql
+
+# 11. Verificar el estado de la replicación
+sudo -u postgres psql -c "select * from pg_stat_replication;"   # En el MASTER
+sudo -u postgres psql -c "select * from pg_is_in_recovery();"   # En el SLAVE
+
+# Notas:
+# - Reemplaza IP_MASTER y IP_SLAVE por las IPs internas o externas de tus VMs.
+# - Asegúrate de que ambas VMs puedan comunicarse por el puerto 5432.
+# - El usuario y contraseña de replicación deben coincidir en ambos servidores.

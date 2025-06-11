@@ -1,0 +1,53 @@
+# 1. Actualizar e instalar MySQL en ambas VMs
+sudo apt update
+sudo apt install mysql-server -y
+
+# 2. Editar el archivo de configuración en ambas VMs
+sudo nano /etc/mysql/mysql.conf.d/mysqld.cnf
+
+# Cambiar/Agregar las siguientes líneas:
+# En el servidor MASTER (VM1):
+server-id = 1
+log_bin = /var/log/mysql/mysql-bin.log
+bind-address = 0.0.0.0
+
+# En el servidor SLAVE (VM2):
+server-id = 2
+bind-address = 0.0.0.0
+
+# 3. Reiniciar el servicio MySQL en ambas VMs
+sudo systemctl restart mysql
+
+# 4. Crear usuario de replicación en el MASTER (VM1)
+sudo mysql -u root -p
+
+CREATE USER 'replicador'@'%' IDENTIFIED BY 'tu_password';
+GRANT REPLICATION SLAVE ON *.* TO 'replicador'@'%';
+FLUSH PRIVILEGES;
+
+# 5. Obtener el estado binlog en el MASTER (VM1)
+SHOW MASTER STATUS;
+
+# Anota el File y Position que aparecen.
+
+# 6. Permitir el puerto 3306 en el firewall de Google Cloud para ambas VMs
+
+# 7. Configurar el SLAVE (VM2) para replicar del MASTER
+sudo mysql -u root -p
+
+CHANGE MASTER TO
+  MASTER_HOST='IP_MASTER',
+  MASTER_USER='replicador',
+  MASTER_PASSWORD='tu_password',
+  MASTER_LOG_FILE='mysql-bin.00000X',  # Reemplaza por el File del paso 5
+  MASTER_LOG_POS=XXXX;                  # Reemplaza por el Position del paso 5
+
+START SLAVE;
+
+# 8. Verificar el estado de la replicación en el SLAVE (VM2)
+SHOW SLAVE STATUS\G
+
+# Notas:
+# - Reemplaza IP_MASTER por la IP interna o externa de la VM1.
+# - Asegúrate de que ambas VMs puedan comunicarse por el puerto 3306.
+# - El usuario y contraseña de replicación deben coincidir en ambos servidores.

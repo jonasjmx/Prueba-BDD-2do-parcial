@@ -1,0 +1,76 @@
+# 1. Actualizar e instalar SQL Server en ambas VMs
+sudo apt update
+sudo apt install curl apt-transport-https ca-certificates gnupg -y
+curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
+curl https://packages.microsoft.com/config/ubuntu/22.04/mssql-server-2022.list | sudo tee /etc/apt/sources.list.d/mssql-server.list
+sudo apt update
+sudo apt install -y mssql-server
+
+# 2. Configurar SQL Server en ambas VMs
+sudo /opt/mssql/bin/mssql-conf setup
+
+# 3. Instalar herramientas de línea de comandos (opcional pero recomendado)
+curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list | sudo tee /etc/apt/sources.list.d/msprod.list
+sudo apt update
+sudo apt install -y mssql-tools unixodbc-dev
+
+# 4. Agregar herramientas al PATH (opcional)
+echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bashrc
+source ~/.bashrc
+
+# 5. Permitir el puerto 1433 en el firewall de Google Cloud para ambas VMs
+
+# 6. Habilitar y configurar la replicación en el servidor PUBLICADOR (VM1)
+# Conéctate a SQL Server:
+sqlcmd -S localhost -U SA -P 'TuPassword'
+
+-- Habilitar la base de datos para replicación
+USE master;
+GO
+EXEC sp_replicationdboption @dbname = N'TuBaseDeDatos', @optname = N'publish', @value = N'true';
+GO
+
+-- Crear un publicador
+EXEC sp_adddistpublisher @publisher = N'NombreHostVM1', @distribution_db = N'distribution', @security_mode = 1;
+GO
+
+-- Crear una publicación
+USE TuBaseDeDatos;
+GO
+EXEC sp_addpublication @publication = N'TuPublicacion', @status = N'active';
+GO
+
+-- Agregar un artículo a la publicación
+EXEC sp_addarticle @publication = N'TuPublicacion', @article = N'TuTabla', @source_object = N'TuTabla';
+GO
+
+# 7. Configurar el SUSCRIPTOR (VM2)
+# Conéctate a SQL Server en VM2:
+sqlcmd -S localhost -U SA -P 'TuPassword'
+
+-- Agregar el suscriptor
+USE master;
+GO
+EXEC sp_addsubscriber @subscriber = N'NombreHostVM2', @type = 0;
+GO
+
+-- Suscribirse a la publicación
+USE TuBaseDeDatos;
+GO
+EXEC sp_addsubscription @publication = N'TuPublicacion', @subscriber = N'NombreHostVM2', @destination_db = N'TuBaseDeDatos', @subscription_type = N'Push';
+GO
+
+# 8. Verificar el estado de la replicación
+-- En el publicador:
+EXEC sp_helppublication;
+GO
+
+-- En el suscriptor:
+EXEC sp_helpsubscription;
+GO
+
+# Notas:
+# - Cambia 'TuBaseDeDatos', 'TuTabla', 'TuPublicacion', 'NombreHostVM1', 'NombreHostVM2' por los valores reales.
+# - Asegúrate de que ambas VMs puedan comunicarse por el puerto 1433.
+# - El usuario SA y la contraseña deben coincidir en ambos servidores.
+# - Puedes usar SQL Server Management Studio (SSMS) desde tu PC para administrar la replicación de forma gráfica.

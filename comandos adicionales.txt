@@ -1,0 +1,107 @@
+----------------------------------------------------------------------------------------------------
+Mysql
+----------------------------------------------------------------------------------------------------
+-- Verificar el plugin de autenticación del usuario replicator
+SELECT User, Host, plugin FROM mysql.user WHERE User = 'replicator';
+
+-- Mostrar los privilegios del usuario replicator
+SHOW GRANTS FOR 'replicator'@'%';
+
+-- Verificar las bases de datos configuradas para replicación
+SHOW VARIABLES LIKE 'binlog_do_db';
+
+-- Mostrar eventos del log binario (opcional para depuración)
+SHOW BINLOG EVENTS IN 'mysql-bin.000004' FROM 569 LIMIT 10;
+
+-- Bloquear y desbloquear tablas (para sincronización)
+FLUSH TABLES WITH READ LOCK;
+UNLOCK TABLES;
+
+-- Desbloquear IPs bloqueadas (importante en caso de errores de conexión)
+FLUSH HOSTS;
+
+-- Mostrar todos los usuarios configurados en el servidor
+SELECT User, Host FROM mysql.user;
+
+-- Mostrar la versión del servidor MySQL
+SELECT @@version;
+
+-- Mostrar el estado del maestro para replicación
+SHOW MASTER STATUS;
+----------------------------------------------------------------------------------------------------
+Postgresql
+----------------------------------------------------------------------------------------------------
+# Cambia el propietario de la carpeta de datos de PostgreSQL al usuario y grupo 'postgres'
+sudo chown -R postgres:postgres /var/lib/postgresql/16/main
+
+# Asigna permisos 700 (solo el propietario puede leer, escribir y ejecutar) a la carpeta de datos
+sudo chmod 700 /var/lib/postgresql/16/main
+
+# Inicia el servicio de PostgreSQL
+sudo systemctl start postgresql
+
+# Muestra el estado actual del servicio de PostgreSQL
+sudo systemctl status postgresql
+
+# Realiza una copia base del servidor maestro para replicación (streaming WAL)
+pg_basebackup -h <IP_MASTER> -D /var/lib/postgresql/16/main -U replicador -P --wal-method=stream
+
+# Línea de configuración para la conexión al maestro en la replicación
+primary_conninfo = 'host=<IP_MASTER> port=5432 user=replicador password=tu_password'
+
+# Detiene el servicio de PostgreSQL
+sudo systemctl stop postgresql
+
+# Mata el proceso principal de PostgreSQL usando el PID almacenado en postmaster.pid
+sudo kill -9 $(head -1 /var/lib/postgresql/16/main/postmaster.pid)
+
+# Promueve el nodo a principal (de standby a master) usando pg_ctlcluster o pg_ctl
+sudo -u postgres pg_ctlcluster 16 main promote
+sudo -u postgres pg_ctl promote -D /var/lib/postgresql/16/main
+
+# Consulta en PostgreSQL si el nodo está en modo recuperación (standby)
+sudo -u postgres psql -c "SELECT pg_is_in_recovery();"
+----------------------------------------------------------------------------------------------------
+mongodb
+----------------------------------------------------------------------------------------------------
+# Configuración del archivo /etc/mongod.conf para habilitar la replicación y definir la IP y puerto
+net:
+    port: 27017  # Puerto por defecto de MongoDB
+    bindIp: 127.0.0.1,<IP_PRIVADA_VM>  # Permite conexiones locales y desde la IP privada de la VM
+
+replication:
+    replSetName: "rs0"  # Nombre del set de replicación
+
+# Reinicia el servicio de MongoDB para aplicar los cambios de configuración
+sudo systemctl restart mongod
+
+# Habilita el servicio de MongoDB para que inicie automáticamente con el sistema
+sudo systemctl enable mongod
+
+# Inicializa el set de replicación con tres miembros (reemplaza las IPs por las de tus VMs)
+rs.initiate({
+    _id: "rs0",
+    members: [
+        { _id: 0, host: "<IP_PRIVADA_VM1>:27017" },  # Primer nodo del set
+        { _id: 1, host: "<IP_PRIVADA_VM2>:27017" },  # Segundo nodo del set
+        { _id: 2, host: "<IP_PRIVADA_VM3>:27017" }   # Tercer nodo del set
+    ]
+})
+
+# Consulta el estado actual del set de replicación
+rs.status()
+----------------------------------------------------------------------------------------------------
+sql server
+----------------------------------------------------------------------------------------------------
+-- Comentarios sobre la replicación por snapshot en SQL Server:
+
+-- 1. La replicación por snapshot toma una "foto" completa de los datos en un momento específico y la aplica al suscriptor.
+-- 2. Es ideal para bases de datos pequeñas o cuando los cambios son poco frecuentes, ya que transfiere todos los datos cada vez que se genera un snapshot.
+-- 3. Puede causar una carga significativa en la red y en el servidor durante la generación y aplicación del snapshot, especialmente en tablas grandes.
+-- 4. No requiere que las tablas tengan claves primarias, a diferencia de la replicación transaccional.
+-- 5. Los suscriptores pueden quedar desactualizados hasta que se aplique el siguiente snapshot.
+-- 6. Es recomendable programar el snapshot en horarios de baja actividad para minimizar el impacto en los usuarios.
+-- 7. Los cambios realizados en los datos después de tomar el snapshot no se reflejan en el suscriptor hasta el próximo snapshot.
+-- 8. Es importante monitorear el espacio en disco, ya que los archivos de snapshot pueden ser grandes.
+-- 9. La replicación por snapshot es sencilla de configurar y útil para inicializar otros tipos de replicación.
+-- 10. No es adecuada para entornos donde se requiere replicación casi en tiempo real.
