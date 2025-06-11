@@ -1,4 +1,4 @@
-de m# Prácticas de Replicación de Bases de Datos
+# Prácticas de Replicación de Bases de Datos
 
 Este repositorio contiene comandos, configuraciones y notas para la implementación de esquemas de replicación en distintos sistemas de gestión de bases de datos: **MongoDB**, **PostgreSQL**, **SQL Server** y **MySQL**.  
 El objetivo es documentar los pasos necesarios para instalar, configurar y verificar la replicación en cada motor, tanto en entornos locales como en la nube (por ejemplo, Google Cloud).
